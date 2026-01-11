@@ -1,0 +1,458 @@
+
+import React, { useState, useEffect, useMemo } from 'react';
+import { TEACHERS, TOTAL_WEEKS, STORAGE_KEY } from './constants';
+import { SubmissionData, SummaryStats, Teacher } from './types';
+import { generateAIAnalysis } from './services/geminiService';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+
+const LOGO_URL = "https://i.postimg.cc/RCXpF6RP/logo-sek.png";
+
+const App: React.FC = () => {
+  const [data, setData] = useState<SubmissionData>(() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) return JSON.parse(saved);
+    
+    const initial: SubmissionData = {};
+    TEACHERS.forEach(t => {
+      initial[t.id] = new Array(TOTAL_WEEKS).fill(false);
+    });
+    return initial;
+  });
+
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'portal'>('dashboard');
+  const [selectedTeacherId, setSelectedTeacherId] = useState<string>('');
+  const [aiReport, setAiReport] = useState<string | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [submitSuccess, setSubmitSuccess] = useState(false);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  }, [data]);
+
+  const toggleStatus = (teacherId: string, weekIndex: number) => {
+    setData(prev => ({
+      ...prev,
+      [teacherId]: prev[teacherId].map((val, idx) => idx === weekIndex ? !val : val)
+    }));
+  };
+
+  const stats = useMemo<SummaryStats>(() => {
+    let totalSent = 0;
+    const totalPossible = TEACHERS.length * TOTAL_WEEKS;
+    Object.values(data).forEach(arr => {
+      totalSent += arr.filter(v => v).length;
+    });
+    return {
+      totalSubmissions: totalSent,
+      totalPossible,
+      percentage: totalPossible > 0 ? Math.round((totalSent / totalPossible) * 100) : 0,
+      missedCount: totalPossible - totalSent
+    };
+  }, [data]);
+
+  const chartData = useMemo(() => {
+    return TEACHERS.map(t => ({
+      name: t.name.split(' ')[0],
+      fullName: t.name,
+      hantar: data[t.id].filter(v => v).length,
+      takHantar: TOTAL_WEEKS - data[t.id].filter(v => v).length
+    }));
+  }, [data]);
+
+  const handleGenerateReport = async () => {
+    setIsGenerating(true);
+    setAiReport(null);
+    const report = await generateAIAnalysis(TEACHERS, data);
+    setAiReport(report);
+    setIsGenerating(false);
+  };
+
+  const filteredTeachers = TEACHERS.filter(t => 
+    t.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const teacherProgress = selectedTeacherId ? data[selectedTeacherId].filter(v => v).length : 0;
+  const suggestedWeek = selectedTeacherId ? data[selectedTeacherId].findIndex(v => !v) : -1;
+
+  const handlePortalSubmit = (weekIdx: number) => {
+    if (!selectedTeacherId) return;
+    toggleStatus(selectedTeacherId, weekIdx);
+    setSubmitSuccess(true);
+    setTimeout(() => setSubmitSuccess(false), 3000);
+  };
+
+  return (
+    <div className="min-h-screen pb-20 bg-slate-50">
+      {/* Navigation Bar */}
+      <nav className="bg-white border-b border-slate-200 sticky top-0 z-50 backdrop-blur-md bg-white/90">
+        <div className="max-w-screen-2xl mx-auto px-4 flex items-center justify-between h-20">
+          <div className="flex items-center gap-3">
+            <img src={LOGO_URL} alt="Logo" className="w-10 h-10 md:w-12 md:h-12 object-contain" />
+            <div className="flex flex-col">
+              <span className="font-extrabold text-slate-900 text-sm md:text-lg leading-tight uppercase tracking-tight">eRPH 2026</span>
+              <span className="text-emerald-600 font-bold text-[10px] md:text-xs uppercase tracking-widest">SK SEDILI BESAR</span>
+            </div>
+          </div>
+          
+          <div className="flex bg-slate-100 p-1 rounded-2xl">
+            <button 
+              onClick={() => setActiveTab('dashboard')}
+              className={`px-4 py-2 rounded-xl text-xs md:text-sm font-bold transition-all ${activeTab === 'dashboard' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              Dashboard
+            </button>
+            <button 
+              onClick={() => setActiveTab('portal')}
+              className={`px-4 py-2 rounded-xl text-xs md:text-sm font-bold transition-all ${activeTab === 'portal' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              Portal Guru
+            </button>
+          </div>
+
+          <div className="hidden md:block">
+            <button 
+              onClick={handleGenerateReport}
+              disabled={isGenerating}
+              className="bg-slate-900 text-white px-5 py-2 rounded-xl text-xs font-bold hover:bg-emerald-600 transition-all flex items-center gap-2 disabled:opacity-50 active:scale-95"
+            >
+              {isGenerating ? (
+                <svg className="animate-spin h-4 w-4 text-white" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+              ) : (
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+              )}
+              {isGenerating ? 'Menjana Analisis...' : 'Laporan AI'}
+            </button>
+          </div>
+        </div>
+      </nav>
+
+      {activeTab === 'dashboard' ? (
+        <main className="max-w-screen-2xl mx-auto p-4 md:p-8 space-y-10 animate-in fade-in duration-700">
+          {/* Dashboard Header */}
+          <div className="text-center md:text-left space-y-2">
+            <h2 className="text-3xl md:text-5xl font-black text-slate-900 tracking-tighter leading-none">DASHBOARD eRPH SK SEDILI BESAR 2026</h2>
+            <div className="flex items-center justify-center md:justify-start gap-2 text-slate-500 font-semibold text-sm">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              Sistem Pemantauan Rekod Pengajaran Harian Digital
+            </div>
+          </div>
+
+          {/* 1. WEEKLY STATUS TABLE (TOP) */}
+          <div className="bg-white rounded-[2rem] border border-slate-200 shadow-xl shadow-slate-200/50 overflow-hidden border-t-8 border-t-emerald-600">
+            <div className="p-6 md:p-8 border-b border-slate-100 flex flex-col lg:flex-row lg:items-center justify-between gap-6 bg-emerald-50/20">
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-emerald-600 rounded-2xl shadow-lg shadow-emerald-200">
+                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
+                </div>
+                <div>
+                  <h2 className="font-black text-slate-800 text-xl uppercase tracking-tight">Status Penghantaran Guru</h2>
+                  <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.2em] mt-0.5">Semakan Mingguan Sesi Akademik 2026</p>
+                </div>
+              </div>
+              <div className="relative w-full lg:w-96">
+                <input 
+                  type="text" 
+                  placeholder="Cari nama guru..." 
+                  className="w-full px-12 py-4 bg-white border-2 border-slate-100 rounded-[1.25rem] text-sm focus:ring-8 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all font-bold shadow-inner"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+                <svg className="w-5 h-5 absolute left-4 top-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+              </div>
+            </div>
+            <div className="overflow-x-auto custom-scrollbar">
+              <table className="w-full text-center border-collapse">
+                <thead>
+                  <tr className="bg-slate-50">
+                    <th className="sticky left-0 z-20 bg-slate-50 p-6 text-left text-xs font-black text-slate-400 uppercase border-r border-b border-slate-200 min-w-[300px] tracking-widest">Warga Pendidik</th>
+                    {Array.from({ length: TOTAL_WEEKS }).map((_, i) => (
+                      <th key={i} className="p-2 text-[10px] font-black text-slate-400 border-b border-slate-200 min-w-[45px]">M{i+1}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredTeachers.map(teacher => (
+                    <tr key={teacher.id} className="group hover:bg-emerald-50/40 transition-colors">
+                      <td className="sticky left-0 z-20 bg-white group-hover:bg-emerald-50/40 p-6 border-r border-b border-slate-100 font-black text-sm text-slate-700 shadow-[8px_0_15px_-10px_rgba(0,0,0,0.1)] uppercase tracking-tight transition-colors">
+                        {teacher.name}
+                      </td>
+                      {data[teacher.id].map((sent, weekIdx) => (
+                        <td key={weekIdx} className="p-1.5 border-b border-slate-100">
+                          <div 
+                            className={`w-9 h-9 mx-auto rounded-xl flex items-center justify-center text-xs font-black text-white transition-all shadow-md transform hover:scale-125 cursor-pointer ${sent ? 'bg-emerald-500 shadow-emerald-200' : 'bg-rose-500 opacity-20 hover:opacity-100 shadow-rose-200'}`}
+                            onClick={() => toggleStatus(teacher.id, weekIdx)}
+                          >
+                            {sent ? '✓' : 'X'}
+                          </div>
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* 2. STATS GRID (BELOW TABLE) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="bg-white p-8 rounded-[2rem] border border-slate-200 shadow-sm hover:shadow-2xl transition-all group overflow-hidden relative">
+              <div className="absolute -right-4 -top-4 w-24 h-24 bg-emerald-50 rounded-full group-hover:scale-150 transition-transform duration-700 pointer-events-none opacity-50"></div>
+              <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.25em] mb-4">Prestasi KPI</p>
+              <div className="flex items-baseline gap-2 mb-4">
+                <span className="text-5xl font-black text-slate-900 tracking-tighter">{stats.percentage}%</span>
+                <span className="text-emerald-500 text-xs font-bold uppercase">Sempurna</span>
+              </div>
+              <div className="w-full bg-slate-100 h-4 rounded-full overflow-hidden shadow-inner border border-slate-50">
+                <div className="bg-emerald-500 h-full transition-all duration-1000 ease-out shadow-lg" style={{ width: `${stats.percentage}%` }} />
+              </div>
+            </div>
+
+            <div className="bg-white p-8 rounded-[2rem] border border-slate-200 shadow-sm hover:shadow-2xl transition-all group overflow-hidden relative">
+              <div className="absolute -right-4 -top-4 w-24 h-24 bg-blue-50 rounded-full group-hover:scale-150 transition-transform duration-700 pointer-events-none opacity-50"></div>
+              <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.25em] mb-4">Rekod Hijau</p>
+              <div className="flex items-baseline gap-2">
+                <span className="text-5xl font-black text-emerald-600 tracking-tighter">{stats.totalSubmissions}</span>
+                <span className="text-slate-400 text-sm font-bold">/ {stats.totalPossible}</span>
+              </div>
+              <p className="text-[10px] text-slate-400 mt-4 font-bold uppercase tracking-widest italic leading-relaxed">Penghantaran Berjaya Disahkan</p>
+            </div>
+
+            <div className="bg-white p-8 rounded-[2rem] border border-slate-200 shadow-sm hover:shadow-2xl transition-all group overflow-hidden relative">
+              <div className="absolute -right-4 -top-4 w-24 h-24 bg-rose-50 rounded-full group-hover:scale-150 transition-transform duration-700 pointer-events-none opacity-50"></div>
+              <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.25em] mb-4">Rekod Merah</p>
+              <div className="flex items-baseline gap-2">
+                <span className="text-5xl font-black text-rose-600 tracking-tighter">{stats.missedCount}</span>
+                <span className="text-rose-400 text-xs font-extrabold uppercase ml-1">Cicir</span>
+              </div>
+              <p className="text-[10px] text-slate-400 mt-4 font-bold uppercase tracking-widest italic leading-relaxed">Memerlukan Tindakan Segera</p>
+            </div>
+
+            <div className="bg-white p-8 rounded-[2rem] border border-slate-200 shadow-sm hover:shadow-2xl transition-all group overflow-hidden relative border-b-8 border-b-slate-900">
+              <div className="absolute -right-4 -top-4 w-24 h-24 bg-slate-100 rounded-full group-hover:scale-150 transition-transform duration-700 pointer-events-none opacity-50"></div>
+              <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.25em] mb-4">Guru Aktif</p>
+              <div className="flex items-baseline gap-2">
+                <span className="text-5xl font-black text-slate-900 tracking-tighter">{TEACHERS.length}</span>
+                <span className="text-slate-400 text-xs font-bold uppercase ml-1">Individu</span>
+              </div>
+              <p className="text-[10px] text-slate-400 mt-4 font-bold uppercase tracking-widest italic leading-relaxed">Warga Pendidik Berdaftar</p>
+            </div>
+          </div>
+
+          {/* AI Report Section */}
+          {aiReport && (
+            <div className="bg-slate-900 text-white p-10 rounded-[3rem] shadow-2xl relative animate-in zoom-in-95 duration-700 overflow-hidden group">
+              <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none transform group-hover:rotate-12 transition-transform duration-1000">
+                <svg className="w-48 h-48 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" /></svg>
+              </div>
+              <button onClick={() => setAiReport(null)} className="absolute top-8 right-8 text-slate-500 hover:text-white transition-colors p-3 bg-white/5 rounded-full">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+              <h3 className="text-emerald-400 font-black mb-8 flex items-center gap-5 text-2xl uppercase tracking-tighter">
+                <div className="bg-emerald-500/20 p-3 rounded-2xl">
+                  <svg className="w-8 h-8 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                </div>
+                Analisis Pintar Pengetua
+              </h3>
+              <div className="text-slate-200 text-lg leading-relaxed whitespace-pre-wrap font-medium bg-white/5 p-8 rounded-3xl border border-white/10 backdrop-blur-xl">
+                {aiReport}
+              </div>
+            </div>
+          )}
+
+          {/* Chart Section */}
+          <div className="bg-white p-10 rounded-[3rem] border border-slate-200 shadow-sm">
+            <div className="flex flex-col md:flex-row md:items-center justify-between mb-12 gap-6">
+              <div>
+                <h2 className="font-black text-slate-900 text-3xl tracking-tighter uppercase">Visualisasi Prestasi</h2>
+                <p className="text-slate-400 text-xs font-black uppercase tracking-[0.3em] mt-1">Status Penghantaran Mengikut Nama Guru</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-6 text-[10px] font-black uppercase tracking-[0.2em]">
+                <span className="flex items-center gap-2 text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-full border border-emerald-100"><div className="w-3 h-3 bg-emerald-500 rounded-sm"></div> Cemerlang</span>
+                <span className="flex items-center gap-2 text-blue-600 bg-blue-50 px-3 py-1.5 rounded-full border border-blue-100"><div className="w-3 h-3 bg-blue-500 rounded-sm"></div> Memuaskan</span>
+                <span className="flex items-center gap-2 text-rose-600 bg-rose-50 px-3 py-1.5 rounded-full border border-rose-100"><div className="w-3 h-3 bg-rose-500 rounded-sm"></div> Perhatian</span>
+              </div>
+            </div>
+            <div className="h-[500px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData} margin={{ top: 20, right: 20, left: 0, bottom: 60 }}>
+                  <CartesianGrid strokeDasharray="3 6" vertical={false} stroke="#f1f5f9" />
+                  <XAxis 
+                    dataKey="name" 
+                    axisLine={false} 
+                    tickLine={false} 
+                    tick={{ fontSize: 10, fill: '#64748b', fontWeight: 900 }} 
+                    interval={0}
+                    angle={-45}
+                    textAnchor="end"
+                  />
+                  <YAxis 
+                    domain={[0, TOTAL_WEEKS]} 
+                    axisLine={false} 
+                    tickLine={false} 
+                    tick={{ fontSize: 12, fill: '#94a3b8', fontWeight: 700 }} 
+                  />
+                  <Tooltip 
+                    cursor={{ fill: '#f8fafc' }}
+                    contentStyle={{ borderRadius: '28px', border: 'none', boxShadow: '0 30px 60px -12px rgba(0, 0, 0, 0.25)', padding: '20px' }}
+                    itemStyle={{ fontWeight: '900', fontSize: '14px' }}
+                    labelStyle={{ fontWeight: '900', marginBottom: '8px', color: '#0f172a', fontSize: '16px' }}
+                  />
+                  <Bar dataKey="hantar" radius={[12, 12, 0, 0]} barSize={50}>
+                    {chartData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.hantar >= 40 ? '#10b981' : entry.hantar < 20 ? '#f43f5e' : '#3b82f6'} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </main>
+      ) : (
+        /* PORTAL GURU SECTION */
+        <main className="max-w-3xl mx-auto p-4 md:p-10 pt-10 animate-in slide-in-from-bottom duration-700">
+          <div className="bg-white rounded-[3.5rem] shadow-2xl border border-slate-200 overflow-hidden">
+            <div className="bg-emerald-600 p-16 text-white text-center flex flex-col items-center relative group">
+              <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none overflow-hidden">
+                <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+                  <path d="M0 100 C 40 0 60 0 100 100 Z" fill="white" />
+                </svg>
+              </div>
+              <img src={LOGO_URL} alt="Logo" className="w-32 h-32 object-contain mb-10 filter drop-shadow-2xl group-hover:scale-110 transition-transform duration-700" />
+              <h2 className="text-4xl md:text-5xl font-black tracking-tighter uppercase leading-none">Portal eRPH Guru</h2>
+              <p className="opacity-70 text-xs md:text-sm mt-4 font-black uppercase tracking-[0.4em]">SK Sedili Besar • Sesi 2026</p>
+            </div>
+            
+            <div className="p-10 md:p-16 space-y-12">
+              <div className="space-y-4">
+                <label className="block text-center text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">Identiti Warga Pendidik</label>
+                <div className="relative">
+                  <select 
+                    className="w-full p-6 bg-slate-50 border-2 border-slate-100 rounded-[2rem] focus:ring-12 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all outline-none text-slate-900 font-black appearance-none cursor-pointer text-center text-xl md:text-2xl shadow-inner"
+                    value={selectedTeacherId}
+                    onChange={(e) => setSelectedTeacherId(e.target.value)}
+                  >
+                    <option value="">SILA PILIH NAMA ANDA...</option>
+                    {TEACHERS.map(t => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </select>
+                  <div className="absolute right-8 top-1/2 -translate-y-1/2 pointer-events-none text-emerald-600">
+                    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="4" d="M19 9l-7 7-7-7" /></svg>
+                  </div>
+                </div>
+              </div>
+
+              {selectedTeacherId && (
+                <div className="space-y-12 animate-in fade-in zoom-in-95 duration-700">
+                  <div className="bg-slate-50 p-10 rounded-[2.5rem] border-2 border-slate-100 relative overflow-hidden">
+                    <div className="flex justify-between items-center mb-6">
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Progress Keseluruhan</span>
+                      <span className="text-emerald-600 font-black text-3xl">{Math.round((teacherProgress / TOTAL_WEEKS) * 100)}%</span>
+                    </div>
+                    <div className="w-full bg-white h-6 rounded-full overflow-hidden shadow-inner border border-slate-200 p-1">
+                      <div className="bg-gradient-to-r from-emerald-400 to-emerald-600 h-full transition-all duration-1000 ease-out shadow-lg rounded-full" style={{ width: `${(teacherProgress / TOTAL_WEEKS) * 100}%` }} />
+                    </div>
+                    <p className="text-sm font-black text-slate-600 mt-6 text-center uppercase tracking-[0.2em]">
+                      Status: <span className="text-emerald-600">{teacherProgress}</span> / {TOTAL_WEEKS} Minggu Lengkap
+                    </p>
+                  </div>
+
+                  {suggestedWeek !== -1 ? (
+                    <div className="space-y-8">
+                      <div className="text-center p-12 bg-emerald-50 rounded-[3rem] border-2 border-emerald-100 shadow-xl shadow-emerald-50 relative overflow-hidden group">
+                        <div className="absolute -left-10 -bottom-10 w-32 h-32 bg-emerald-100 rounded-full opacity-50 group-hover:scale-150 transition-transform duration-1000"></div>
+                        <p className="text-emerald-800 text-xs font-black uppercase tracking-[0.3em] mb-3 relative z-10">Sila Hantar Rekod:</p>
+                        <h3 className="text-6xl md:text-7xl font-black text-slate-900 tracking-tighter relative z-10">MINGGU {suggestedWeek + 1}</h3>
+                      </div>
+                      
+                      <button 
+                        onClick={() => handlePortalSubmit(suggestedWeek)}
+                        disabled={submitSuccess}
+                        className={`w-full py-10 rounded-[2.5rem] font-black text-3xl shadow-2xl transform active:scale-90 transition-all flex items-center justify-center gap-6 ${submitSuccess ? 'bg-emerald-100 text-emerald-700 pointer-events-none' : 'bg-emerald-600 text-white hover:bg-emerald-700 hover:shadow-emerald-200'}`}
+                      >
+                        {submitSuccess ? (
+                          <>
+                            <svg className="w-12 h-12 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="4" d="M5 13l4 4L19 7" /></svg>
+                            BERJAYA!
+                          </>
+                        ) : (
+                          <>
+                            <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+                            HANTAR M{suggestedWeek + 1}
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="bg-emerald-500 p-16 rounded-[3.5rem] text-center shadow-2xl shadow-emerald-200 border-b-12 border-emerald-700 transform hover:rotate-1 transition-transform">
+                      <div className="w-28 h-28 bg-white/20 text-white rounded-full flex items-center justify-center mx-auto mb-10 shadow-xl backdrop-blur-md">
+                        <svg className="w-16 h-16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                      </div>
+                      <h3 className="text-white font-black text-4xl uppercase tracking-tight">Status Sempurna!</h3>
+                      <p className="text-emerald-100 text-sm md:text-base mt-6 font-black uppercase tracking-[0.25em] leading-relaxed">
+                        Tugas Selesai.<br/>Terima kasih atas dedikasi anda.
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="pt-8">
+                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.4em] mb-8 text-center">Ringkasan Kalendar Tahunan</h4>
+                    <div className="grid grid-cols-7 sm:grid-cols-10 gap-3">
+                      {data[selectedTeacherId].map((sent, idx) => (
+                        <div 
+                          key={idx}
+                          className={`aspect-square rounded-2xl flex items-center justify-center text-[10px] font-black transition-all border-2 transform hover:scale-110 ${sent ? 'bg-emerald-500 text-white border-emerald-400 shadow-lg' : 'bg-white text-slate-300 border-slate-100'}`}
+                        >
+                          {idx + 1}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {!selectedTeacherId && (
+                <div className="py-24 text-center">
+                  <div className="w-32 h-32 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-10 shadow-inner border-2 border-slate-100 group">
+                    <svg className="w-16 h-16 text-slate-200 group-hover:text-emerald-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                  </div>
+                  <p className="font-black text-slate-400 uppercase tracking-[0.4em] text-xs">Pilih Identiti Untuk Mengakses Portal</p>
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="mt-16 text-center space-y-2">
+            <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.5em]">
+              SK SEDILI BESAR • SISTEM PENGURUSAN DIGITAL
+            </p>
+            <p className="text-slate-300 text-[8px] font-bold">© 2026 Hak Cipta Terpelihara</p>
+          </div>
+        </main>
+      )}
+
+      {/* Mobile AI FAB */}
+      <div className="md:hidden fixed bottom-10 right-8 z-50">
+        <button 
+          onClick={handleGenerateReport}
+          disabled={isGenerating}
+          className="w-16 h-16 bg-slate-900 text-white rounded-full shadow-2xl flex items-center justify-center hover:scale-110 active:scale-90 transition-all border-4 border-white"
+        >
+          {isGenerating ? (
+            <svg className="animate-spin h-7 w-7 text-white" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+          ) : (
+            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+          )}
+        </button>
+      </div>
+    </div>
+  );
+};
+
+export default App;

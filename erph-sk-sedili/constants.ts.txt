@@ -1,0 +1,25 @@
+
+import { Teacher } from './types';
+
+export const TOTAL_WEEKS = 43;
+export const TEACHERS: Teacher[] = [
+  { id: '1', name: 'HAJAH NORYATI BINTI UNOS' },
+  { id: '2', name: 'SAKURA BINTI YUSOP' },
+  { id: '3', name: 'NOR AIZAN BIN SARANAH' },
+  { id: '4', name: 'MOHD AZMI BIN ABU' },
+  { id: '5', name: 'AISHAH BINTI ISHAK' },
+  { id: '6', name: 'MASLIZA BINTI MUHAMMAD SHAH' },
+  { id: '7', name: 'MOHAMAD SAUFI BIN ARIS @ MOHD ARIS' },
+  { id: '8', name: 'MUHAMMAD AIMAN HAKIM BIN ABDUL RAZAK' },
+  { id: '9', name: 'MUHAMMAD AKIF ZAIM BIN ZULKIFLI' },
+  { id: '10', name: 'SITI AMINAH NADIAH BINTI ZAHRY' },
+  { id: '11', name: 'MOHAMMAD QOYYUM BIN ISMAIL' },
+  { id: '12', name: 'NUR AFIAH AKILAH BINTI MAT SHAH' },
+  { id: '13', name: 'RUZAIMAH BINTI SAHLAN' },
+  { id: '14', name: 'KHAIRUN NADIAH BINTI MOHAMAD ZAINI' },
+  { id: '15', name: 'NORFARAHIN BINTI ABU AMAR' },
+  { id: '16', name: 'NOOR AZRIN BINTI BUANG' },
+  { id: '17', name: 'MOHD RIDZUAN BIN MAT NOOR' }
+];
+
+export const STORAGE_KEY = 'rph_dashboard_data_2026';

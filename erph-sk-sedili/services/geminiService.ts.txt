@@ -1,0 +1,38 @@
+
+import { GoogleGenAI } from "@google/genai";
+import { Teacher, SubmissionData } from "../types";
+import { TOTAL_WEEKS } from "../constants";
+
+export const generateAIAnalysis = async (teachers: Teacher[], data: SubmissionData) => {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  
+  // Prepare a condensed summary for AI context
+  const summary = teachers.map(t => {
+    const sent = data[t.id]?.filter(s => s).length || 0;
+    const missed = TOTAL_WEEKS - sent;
+    return `${t.name}: ${sent}/${TOTAL_WEEKS} hantar.`;
+  }).join("\n");
+
+  const prompt = `
+    Bertindak sebagai Pengetua Sekolah. Berdasarkan data penghantaran RPH 2026 di bawah, 
+    berikan satu laporan ringkas dalam Bahasa Melayu yang merangkumi:
+    1. Rumusan keseluruhan prestasi guru.
+    2. Kata-kata semangat untuk guru yang cemerlang (100% hantar).
+    3. Teguran berhemah untuk guru yang mempunyai banyak rekod merah.
+    4. Cadangan penambahbaikan.
+
+    DATA:
+    ${summary}
+  `;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: prompt,
+    });
+    return response.text;
+  } catch (error) {
+    console.error("Gemini Error:", error);
+    return "Maaf, ralat berlaku semasa menjana laporan AI. Sila cuba lagi.";
+  }
+};

@@ -1,0 +1,5 @@
+{
+  "name": "eRPH SK SEDILI BESAR 2026",
+  "description": "Sistem pemantauan penghantaran RPH untuk 17 orang guru SK Sedili Besar selama 43 minggu sesi persekolahan 2026.",
+  "requestFramePermissions": []
+}
